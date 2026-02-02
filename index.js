@@ -34,15 +34,27 @@ function initUI() {
                             </div>
                         `).join('')}
                         
-                        <div id="curator-progress-container" style="display:none;">
+                        <div id="curator-progress-container" style="display:none; margin-top: 10px;">
                             <div id="curator-status">Initializing...</div>
-                            <div class="curator-progress-bg">
-                                <div id="curator-progress-bar" style="width: 0%;"></div>
+                            <div class="curator-progress-bg" style="background: rgba(0,0,0,0.2); border-radius: 4px; height: 8px; margin: 5px 0; overflow: hidden;">
+                                <div id="curator-progress-bar" style="width: 0%; height: 100%; background: #4a9eff; border-radius: 4px; transition: width 0.2s;"></div>
                             </div>
-                            <div id="curator-log"></div>
+                            
+                            <div id="curator-log" style="
+                                background: rgba(0,0,0,0.2); 
+                                border: 1px solid rgba(255,255,255,0.1); 
+                                height: 150px; 
+                                overflow-y: auto; 
+                                margin-top: 10px; 
+                                padding: 5px; 
+                                font-family: monospace; 
+                                font-size: 11px;
+                                color: #ccc;
+                                display: block;
+                            "></div>
                         </div>
 
-                        <div class="curator-actions">
+                        <div class="curator-actions" style="margin-top: 10px; display: flex; gap: 5px;">
                             <button id="st-curator-run" class="menu_button interactable" title="${helpText.run}">
                                 <i class="fa-solid fa-broom-magic"></i> Run Audit
                             </button>
