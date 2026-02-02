@@ -1,0 +1,94 @@
+.curator-setting {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 8px;
+}
+.curator-setting label {
+    flex: 1;
+    font-size: 0.9em;
+    cursor: help;
+    border-bottom: 1px dotted var(--SmartThemeTextColor);
+}
+.curator-setting input[type="range"] {
+    flex: 2;
+    cursor: pointer;
+}
+.curator-setting span {
+    width: 30px;
+    text-align: right;
+    font-weight: bold;
+    color: var(--SmartThemeQuoteColor);
+}
+#curator-progress-container {
+    margin: 15px 0;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    display: none; 
+}
+#curator-status {
+    font-size: 0.9em;
+    margin-bottom: 8px;
+    color: var(--mainColor);
+    font-weight: bold;
+    text-shadow: 1px 1px 1px black;
+}
+.curator-progress-bg {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    height: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.5);
+    margin-bottom: 10px;
+    position: relative;
+}
+#curator-progress-bar {
+    background-color: var(--mainColor, #00bbff) !important;
+    height: 100% !important;
+    /* Width removed to stay in line with Gold Script control */
+    transition: width 0.2s ease-out;
+}
+#curator-log {
+    margin-top: 10px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 11px;
+    height: 100px;
+    overflow-y: auto;
+    background: #000 !important;
+    padding: 10px;
+    border-radius: 5px;
+    color: #00ff00;
+    border: 1px solid #444;
+}
+#curator-log div {
+    border-bottom: 1px solid #111;
+    padding: 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.curator-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    margin-top: 15px !important;
+    margin-bottom: 10px !important;
+    width: 100% !important;
+}
+.curator-actions button {
+    flex: 1 !important;
+    border-radius: 10px !important;
+    padding: 8px 5px !important;
+    font-size: 0.85em !important;
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0 !important;
+}
+#st-curator-run {
+    flex: 2 !important; /* Prioritizes the main action width */
+}
