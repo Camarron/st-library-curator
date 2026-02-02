@@ -1,7 +1,49 @@
-import { characters, saveCharacterDebounced, eventSource, event_types } from "../../../../script.js";
-import { executeSlashCommands } from "../../../slash-commands.js";
+import getContext from "/scripts/st-context.js";
+import { tags, tag_map } from "/scripts/tags.js";
 
+// Minimal sleep to let the UI breathe
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+// --- ENHANCED LOGGER ---
+function uiLog(message, type = "info") {
+    console.log(`[CURATOR] ${message}`);
+    const logArea = document.getElementById('curator-log');
+    if (logArea) {
+        const entry = document.createElement('div');
+        entry.textContent = `> ${message}`;
+        entry.style.borderBottom = "1px solid #ffffff22";
+        entry.style.padding = "2px 0";
+        
+        if (type === "error") {
+            entry.style.color = "#ff6b6b";
+            entry.style.fontWeight = "bold";
+        } else if (type === "success") {
+            entry.style.color = "#51cf66";
+        } else if (type === "warning") {
+            entry.style.color = "#fcc419";
+        }
+        
+        logArea.prepend(entry);
+    }
+}
+
+function getDuplicateTagId() {
+    if (!tags) return null;
+    const match = tags.find(t => t.name.toLowerCase() === "duplicate");
+    return match ? match.id : null;
+}
+
+function isAlreadyTagged(char, duplicateId) {
+    if (!duplicateId) return false; 
+    const mapTags = tag_map[char.avatar] || [];
+    if (mapTags.includes(duplicateId)) return true;
+    
+    const noExt = char.avatar.replace(/\.[^/.]+$/, "");
+    if ((tag_map[noExt] || []).includes(duplicateId)) return true;
+
+    if (char.tags && char.tags.some(t => t.toLowerCase() === "duplicate")) return true;
+    return false;
+}
 
 function getFingerprint(text) {
     return text.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 100);
@@ -29,64 +71,66 @@ function getSimilarity(s1, s2) {
     return (longer.length - costs[s2.length]) / parseFloat(longer.length);
 }
 
-async function updateProgress(percent, status, logMessage = null) {
+// --- RESTORED FLAVOR TEXT ---
+async function updateProgress(percent, status) {
     const container = document.getElementById('curator-progress-container');
     const bar = document.getElementById('curator-progress-bar');
     const statusText = document.getElementById('curator-status');
-    const logArea = document.getElementById('curator-log');
 
     let flavorText = "";
+    
+    // Extract the denominator number from "Grouping... (50/100)"
     const totalNum = parseInt(status.match(/\/(\d+)/)?.[1]) || 0;
 
-    if (totalNum === 69) flavorText = " 😎 Nice.";
-    else if (totalNum === 420 || totalNum === 4200) flavorText = " 🌿 Blaze it.";
-    else if (totalNum === 666) flavorText = " 🤘 Metal.";
-    else if (totalNum === 777) flavorText = " 🎰 Jackpot!";
-    else if (totalNum > 1000) flavorText = " 💀 Librarian's Nightmare.";
+    if (totalNum === 69) flavorText = " 🕶️ Nice.";
+    else if (totalNum > 1000) flavorText = " 📚 Librarian's Nightmare.";
 
-    if (percent > 99) flavorText = " 🎉 Clean as a whistle!";
+    if (percent > 99) flavorText = " ✨ Clean as a whistle!";
 
     if (container) container.style.display = 'block';
     if (statusText) statusText.textContent = status + flavorText;
     if (bar) bar.style.width = percent + '%';
-
-    if (logMessage && logArea) {
-        const entry = document.createElement('div');
-        entry.textContent = `> ${logMessage}`;
-        logArea.prepend(entry);
-    }
+    
     await sleep(10); 
 }
 
 function getQualityScore(char) {
-    const w = {
-        lore: parseInt($('#curator-weight-lore').val()) || 5,
-        dialogue: parseInt($('#curator-weight-dialogue').val()) || 10,
-        greetings: parseInt($('#curator-weight-greetings').val()) || 3,
-        spec: parseInt($('#curator-weight-spec').val()) || 5
-    };
     let score = 0;
     if (char.description) score += Math.floor(char.description.length / 100);
-    if (char.character_book?.entries) {
-        const loreText = char.character_book.entries.map(e => e.content || "").join("");
-        score += Math.floor(loreText.length / 1000) * w.lore;
-    }
-    if (char.mes_example?.length > 500) score += w.dialogue;
-    if (Array.isArray(char.alternate_greetings)) score += (char.alternate_greetings.length * w.greetings);
-    if (char.spec === "chara_card_v3") score += w.spec;
+    if (char.character_book?.entries) score += 5;
+    if (char.mes_example?.length > 500) score += 10;
     return score;
 }
 
 export async function doAudit() {
+    const context = getContext();
+    const characters = context.characters;
+    const executeSlashCommands = context.executeSlashCommands;
+    const eventSource = context.eventSource;
+    const event_types = context.event_types;
+
     let currentStep = "Initialization";
     try {
-        if (!characters.length) return toastr.error("No characters found.");
         const logArea = document.getElementById('curator-log');
         if (logArea) logArea.innerHTML = '';
+        uiLog("Initializing Turbo Librarian...", "info");
+
+        if (!characters.length) {
+            uiLog("CRITICAL: No characters found in library.", "error");
+            return toastr.error("No characters found.");
+        }
         
+        const duplicateId = getDuplicateTagId();
+        if (duplicateId) {
+            uiLog(`System Check: 'Duplicate' tag ID resolved.`, "success");
+        } else {
+            uiLog("WARNING: 'Duplicate' tag not defined in system.", "warning");
+        }
+
         const fingerprintGroups = new Map();
         const toTag = [];
         const total = characters.length;
+        uiLog(`Library Size: ${total} cards.`);
 
         currentStep = "Fingerprinting/Grouping";
         for (let i = 0; i < total; i++) {
@@ -105,6 +149,9 @@ export async function doAudit() {
         currentStep = "Fuzzy Analysis";
         let analyzed = 0;
         const groups = Array.from(fingerprintGroups.values());
+        
+        uiLog(`Grouping complete. Analyzing ${groups.length} unique fingerprints...`);
+
         for (const group of groups) {
             if (group.length > 1) {
                 group.sort((a, b) => b.score - a.score);
@@ -113,6 +160,7 @@ export async function doAudit() {
                     const challenger = group[j];
                     const similarity = getSimilarity(master.desc, challenger.desc);
                     const sameName = (master.name === challenger.name);
+                    
                     if (similarity > 0.90 || (sameName && similarity > 0.40)) {
                         toTag.push(challenger.char);
                     }
@@ -122,28 +170,48 @@ export async function doAudit() {
             if (analyzed % 50 === 0) await updateProgress(15 + (analyzed / groups.length) * 15, `Analyzing matches...`);
         }
 
-        currentStep = "Tagging/Heartbeat Loop";
+        currentStep = "Tagging Loop";
         if (toTag.length > 0) {
+            uiLog(`Analysis Complete. Found ${toTag.length} potential duplicates.`);
+            uiLog("Starting TURBO tagging process...");
+            
+            let skippedCount = 0;
+            let taggedCount = 0;
+
             for (let i = 0; i < toTag.length; i++) {
                 const char = toTag[i];
-                if (!char.tags?.includes('Duplicate')) {
-                    await executeSlashCommands(`/tag-add name="${char.avatar}" Duplicate`);
-                    await sleep(2000); 
+                
+                if (isAlreadyTagged(char, duplicateId)) {
+                    skippedCount++;
+                    uiLog(`Skipped: ${char.name}`, "warning");
+                    await updateProgress(30 + ((i / toTag.length) * 70), `Skipping... (${i + 1}/${toTag.length})`);
+                    continue; 
                 }
-                const progress = 30 + ((i / toTag.length) * 70);
-                await updateProgress(progress, `Tagging... (${i + 1}/${toTag.length})`, `Matched: ${char.name}`);
+
+                await executeSlashCommands(`/tag-add name="${char.avatar}" Duplicate`);
+                taggedCount++;
+                uiLog(`Tagged: ${char.name}`, "success");
+                
+                // Turbo Sleep: 50ms
+                await sleep(50); 
+                
+                await updateProgress(30 + ((i / toTag.length) * 70), `Tagging... (${i + 1}/${toTag.length})`);
             }
-            currentStep = "Finalizing Changes";
-            saveCharacterDebounced();
-            eventSource.emit(event_types.CHARACTER_EDITED);
-            toastr.success(`Audit finished! Tagged ${toTag.length} duplicates.`);
+
+            if (eventSource && event_types) {
+                eventSource.emit(event_types.CHARACTER_EDITED);
+            }
+            
+            uiLog(`Audit Finished. Tagged: ${taggedCount} | Skipped: ${skippedCount}`, "success");
+            toastr.success(`Audit finished!`);
         } else {
+            uiLog("No new duplicates found. Library is clean.", "success");
             toastr.success("No new duplicates found.");
         }
     } catch (error) {
-        console.error(`%c [CURATOR ERROR] Failure during: ${currentStep} `, "background: #800; color: #fff; font-weight: bold; padding: 5px;");
-        console.error("Error Message:", error.message);
-        console.error("Full Trace:", error.stack);
-        toastr.error(`Audit failed during ${currentStep}. Check console for details.`);
+        uiLog(`CRITICAL FAILURE during ${currentStep}`, "error");
+        uiLog(`Error: ${error.message}`, "error");
+        console.error(`[CURATOR ERROR]`, error);
+        toastr.error(`Audit failed.`);
     }
 }
