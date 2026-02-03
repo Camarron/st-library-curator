@@ -30,11 +30,6 @@ async function uiLog(message, type = "info") {
     }
 }
 
-function getDuplicateTagId() {
-    if (!tags) return null;
-    return tags.find(t => t.name.toLowerCase() === "duplicate")?.id || null;
-}
-
 function isAlreadyTagged(char, tagName) {
     if (!char.avatar) return false; 
     const mapTags = tag_map[char.avatar] || [];
@@ -98,8 +93,30 @@ async function updateProgress(percent, status) {
 
 export async function doAudit() {
     auditStartTime = performance.now();
-    const { characters, executeSlashCommands, eventSource, event_types } = getContext();
+    const context = getContext();
+    const { characters, executeSlashCommands, eventSource, event_types } = context;
+    
     document.getElementById('curator-progress-container').style.display = 'block';
+    const logArea = document.getElementById('curator-log');
+    if (logArea) logArea.innerHTML = '';
+
+    // GHOST INITIALIZATION: Force ST to recognize tags by adding them to the first character
+    const hasDuplicate = tags.some(t => t.name.toLowerCase() === "duplicate");
+    const hasVariant = tags.some(t => t.name.toLowerCase() === "variant");
+
+    if (!hasDuplicate || !hasVariant) {
+        await uiLog("Initializing system tags via ghost-tagging...", "warning");
+        const proxyChar = characters[0]; // Use the first available card
+        if (!hasDuplicate) {
+            executeSlashCommands(`/tag-add name="${proxyChar.avatar}" Duplicate`);
+            executeSlashCommands(`/tag-remove name="${proxyChar.avatar}" Duplicate`);
+        }
+        if (!hasVariant) {
+            executeSlashCommands(`/tag-add name="${proxyChar.avatar}" Variant`);
+            executeSlashCommands(`/tag-remove name="${proxyChar.avatar}" Variant`);
+        }
+        await sleep(1500); // Wait for the "Ghost" to settle in the database
+    }
 
     const fingerprintGroups = new Map();
     const toTagDuplicate = [];
@@ -107,10 +124,7 @@ export async function doAudit() {
     let currentStep = "Initialization";
 
     try {
-        const logArea = document.getElementById('curator-log');
-        if (logArea) logArea.innerHTML = '';
-        await uiLog("Initializing Library Curator...", "info");
-
+        await uiLog("Initializing Library Curator v1.2.5...", "info");
         if (!characters || !characters.length) return toastr.error("No characters found.");
 
         currentStep = "Fingerprinting";
@@ -124,11 +138,11 @@ export async function doAudit() {
         }
 
         currentStep = "Fuzzy Analysis";
-        let analyzedGroups = 0;
         const groups = Array.from(fingerprintGroups.values());
         await uiLog(`Analyzing ${groups.length} groups with 82% Precision...`);
 
-        for (const group of groups) {
+        for (let i = 0; i < groups.length; i++) {
+            const group = groups[i];
             if (group.length > 1) {
                 group.sort((a, b) => b.score - a.score);
                 const master = group[0];
@@ -152,10 +166,7 @@ export async function doAudit() {
                     }
                 }
             }
-            analyzedGroups++;
-            if (analyzedGroups % 50 === 0) {
-                await updateProgress(15 + (analyzedGroups / groups.length) * 15, `Fuzzy Logic Active...`);
-            }
+            if (i % 50 === 0) await updateProgress(15 + (i / groups.length) * 15, `Fuzzy Logic Active...`);
         }
 
         currentStep = "Tagging Loop";
@@ -167,39 +178,34 @@ export async function doAudit() {
 
             for (const char of toTagDuplicate) {
                 if (isAlreadyTagged(char, "Duplicate")) continue;
-                
                 const backendSignal = new Promise((resolve) => {
                     const h = () => { eventSource.removeListener(event_types.SETTINGS_UPDATED, h); resolve(); };
                     eventSource.on(event_types.SETTINGS_UPDATED, h);
                     setTimeout(h, 5000);
                 });
-
                 await uiLog(`Tagging Duplicate: ${char.name}`);
                 executeSlashCommands(`/tag-add name="${char.avatar}" Duplicate`);
                 await backendSignal;
-                
                 processedCount++;
                 await updateProgress(30 + (processedCount / totalOps) * 70, `Tagging... (${processedCount}/${totalOps})`);
             }
 
             for (const char of toTagVariant) {
                 if (isAlreadyTagged(char, "Variant")) continue;
-
                 const backendSignal = new Promise((resolve) => {
                     const h = () => { eventSource.removeListener(event_types.SETTINGS_UPDATED, h); resolve(); };
                     eventSource.on(event_types.SETTINGS_UPDATED, h);
                     setTimeout(h, 5000);
                 });
-
                 await uiLog(`Tagging Variant: ${char.name}`, "warning");
                 executeSlashCommands(`/tag-add name="${char.avatar}" Variant`);
                 await backendSignal;
-
                 processedCount++;
                 await updateProgress(30 + (processedCount / totalOps) * 70, `Tagging... (${processedCount}/${totalOps})`);
             }
 
             await updateProgress(100, `Complete!`);
+            if (context.saveSettingsDebounced) context.saveSettingsDebounced();
             const finalTotal = ((performance.now() - auditStartTime) / 1000).toFixed(2);
             await uiLog(`✅ OPERATION SUCCESS. Total Time: ${finalTotal}s.`, "success");
             toastr.success(`Audit finished in ${finalTotal}s!`);
