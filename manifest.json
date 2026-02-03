@@ -2,7 +2,7 @@
     "name": "Library Curator",
     "display_name": "Library Curator",
     "description": "Fuzzy logic duplicate finder",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "author": "Norramac and Gemini",
     "entrypoint": "index.js",
     "js": [
