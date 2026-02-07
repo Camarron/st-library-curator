@@ -11,7 +11,7 @@ What started as a simple duplicate finder has evolved into a **Quality Control E
 
 ---
 
-## 🛠 Features (Updated v1.5.0)
+## 🛠 Features (Updated v2.0.0)
 
 ### 🧠 Semantic Smart Scoring
 The Curator no longer assumes "Longer = Better." It now parses card fields to determine **Functional Quality**:
