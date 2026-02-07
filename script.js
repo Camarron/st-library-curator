@@ -11,6 +11,11 @@ function getTimestamp() {
     return `[+${elapsed.toFixed(2)}s]`;
 }
 
+function getWeight(key, fallback) {
+    const el = document.getElementById(`curator-weight-${key}`);
+    return el ? parseFloat(el.value) : fallback;
+}
+
 async function uiLog(message, type = "info") {
     const ts = getTimestamp();
     console.log(`[CURATOR] ${ts} ${message}`);
@@ -67,11 +72,109 @@ function getSimilarity(s1, s2) {
     return (longer.length - costs[s2.length]) / parseFloat(longer.length);
 }
 
-function getQualityScore(char) {
+// --- SEMANTIC ANALYSIS TOOLS ---
+
+function calculateLLMScore(text, type) {
+    if (!text || text.length === 0) return 0;
+    
     let score = 0;
-    if (char.description) score += Math.floor(char.description.length / 100);
-    if (char.character_book?.entries) score += 5;
-    if (char.mes_example?.length > 500) score += 10;
+    const lower = text.toLowerCase();
+
+    // Garbage Detection
+    if (lower.includes("placeholder") || lower.includes("write description here") || lower.includes("example dialogue")) {
+        return -50; 
+    }
+    
+    // JSON Pollution Check
+    if (text.trim().startsWith("{") && text.includes("\"description\":")) {
+        return -100; 
+    }
+
+    if (type === "dialogue") {
+        if (text.includes("<START>") || text.includes( "Example:")) score += 5;
+        if (text.includes(":")) score += 2; 
+    }
+
+    if (type === "system") {
+        if (lower.includes("write") || lower.includes("act as") || lower.includes("scenario")) score += 5;
+        if (lower.includes("user:") && lower.includes("char:")) score -= 10;
+    }
+
+    return score;
+}
+
+function detectFormattingIssues(char) {
+    let issues = false;
+
+    // Check Description for Code/JSON
+    if (char.description && (char.description.trim().startsWith("{") || char.description.includes("[character(\""))) {
+        issues = true;
+    }
+
+    // Check Dialogue for Garbage
+    if (char.mes_example && calculateLLMScore(char.mes_example, "dialogue") <= -50) {
+        issues = true;
+    }
+
+    // Check System Prompt for Garbage
+    if (char.system_prompt && calculateLLMScore(char.system_prompt, "system") <= -10) {
+        issues = true;
+    }
+
+    return issues;
+}
+
+function getQualityScore(char) {
+    if (isAlreadyTagged(char, "Duplicate")) return -1000;
+
+    let score = 0;
+    
+    const wLore = getWeight('lore', 5);
+    const wDialogue = getWeight('dialogue', 10);
+    const wGreetings = getWeight('greetings', 3);
+    const wSpec = getWeight('spec', 5);
+    const wStrict = getWeight('strict', 1);
+
+    // Description
+    if (char.description) {
+        score += Math.floor(char.description.length / 200);
+        if (wStrict > 1 && (char.description.includes("[character(") || char.description.includes("property="))) {
+            score -= 5; 
+        }
+    }
+
+    // Lorebook
+    if (char.character_book?.entries) {
+        let validEntries = 0;
+        char.character_book.entries.forEach(entry => {
+            if (entry.content && entry.content.length > 10 && entry.keys && entry.keys.length > 0) {
+                validEntries++;
+            }
+        });
+        score += (validEntries * (wLore / 2)); 
+    }
+
+    // Dialogue
+    if (char.mes_example && char.mes_example.length > 100) {
+        const quality = calculateLLMScore(char.mes_example, "dialogue");
+        score += (quality > -1) ? (wDialogue + quality) : quality; 
+    }
+    
+    // Greetings
+    if (char.alternate_greetings && Array.isArray(char.alternate_greetings)) {
+        const unique = new Set(char.alternate_greetings.filter(g => g.length > 10));
+        score += (unique.size * wGreetings);
+    }
+
+    // Advanced Prompts
+    if (char.system_prompt && char.system_prompt.length > 10) {
+        score += wSpec + calculateLLMScore(char.system_prompt, "system");
+    }
+    if (char.depth_prompt && char.depth_prompt.length > 10) score += wSpec;
+    
+    // Metadata
+    if (char.creator_notes && char.creator_notes.length > 5) score += 2;
+
     return score;
 }
 
@@ -79,11 +182,18 @@ async function updateProgress(percent, status) {
     const bar = document.getElementById('curator-progress-bar');
     const statusText = document.getElementById('curator-status');
     let flavorText = "";
+    
+    // Extract total card count from status string (e.g. "Fingerprinting... (50/2000)")
     const totalNum = parseInt(status.match(/\/(\d+)/)?.[1]) || 0;
     
+    // --- RESTORED EASTER EGGS ---
     if (totalNum === 69) flavorText = " 🕶️ Nice.";
     else if (totalNum > 1000) flavorText = " 📚 Librarian's Nightmare.";
     
+    // --- NEW EASTER EGG (For Strict Mode) ---
+    const strictVal = document.getElementById('curator-weight-strict')?.value;
+    if (strictVal >= 5 && percent < 10) flavorText = " 🧹 Taking out the trash.";
+
     if (percent >= 100) flavorText = " - Audit and Tagging Done! ✨";
 
     if (statusText) statusText.textContent = status + flavorText;
@@ -94,27 +204,24 @@ async function updateProgress(percent, status) {
 export async function doAudit() {
     auditStartTime = performance.now();
     const context = getContext();
-    const { characters, executeSlashCommands, eventSource, event_types } = context;
+    const { characters, executeSlashCommands } = context;
     
     document.getElementById('curator-progress-container').style.display = 'block';
     const logArea = document.getElementById('curator-log');
     if (logArea) logArea.innerHTML = '';
 
-    const hasDuplicate = tags.some(t => t.name.toLowerCase() === "duplicate");
-    const hasVariant = tags.some(t => t.name.toLowerCase() === "variant");
-
-    if (!hasDuplicate || !hasVariant) {
-        await uiLog("Initializing system tags via ghost-tagging...", "warning");
-        const proxyChar = characters[0]; 
-        if (!hasDuplicate) {
-            executeSlashCommands(`/tag-add name="${proxyChar.avatar}" Duplicate`);
-            executeSlashCommands(`/tag-remove name="${proxyChar.avatar}" Duplicate`);
+    const requiredTags = ["Duplicate", "Variant", "IncorrectFormat"];
+    await uiLog("Verifying system tags...", "info");
+    
+    const proxyChar = characters[0]; 
+    for (const tagName of requiredTags) {
+        const exists = tags.some(t => t.name.toLowerCase() === tagName.toLowerCase());
+        if (!exists) {
+            await uiLog(`Creating tag: #${tagName}`, "warning");
+            executeSlashCommands(`/tag-add name="${proxyChar.avatar}" ${tagName}`);
+            executeSlashCommands(`/tag-remove name="${proxyChar.avatar}" ${tagName}`);
+            await sleep(500);
         }
-        if (!hasVariant) {
-            executeSlashCommands(`/tag-add name="${proxyChar.avatar}" Variant`);
-            executeSlashCommands(`/tag-remove name="${proxyChar.avatar}" Variant`);
-        }
-        await sleep(1500); 
     }
 
     const fingerprintGroups = new Map();
@@ -124,7 +231,7 @@ export async function doAudit() {
     let currentStep = "Initialization";
 
     try {
-        await uiLog("Initializing Library Curator v1.2.8 (Verbose Build)...", "info");
+        await uiLog("Initializing Library Curator v1.5.0 (Flavor Restoration)...", "info");
         if (!characters || !characters.length) return toastr.error("No characters found.");
 
         currentStep = "Fingerprinting";
@@ -133,34 +240,40 @@ export async function doAudit() {
             if (!char.description) continue;
             const fp = getFingerprint(char.description);
             if (!fingerprintGroups.has(fp)) fingerprintGroups.set(fp, []);
-            fingerprintGroups.get(fp).push({ char, desc: char.description, name: char.name, score: getQualityScore(char) });
+            
+            fingerprintGroups.get(fp).push({ 
+                char, 
+                desc: char.description, 
+                name: char.name, 
+                score: getQualityScore(char),
+                hasFormatIssues: detectFormattingIssues(char)
+            });
+            
             if (i % 100 === 0) await updateProgress((i / characters.length) * 15, `Fingerprinting... (${i}/${characters.length})`);
         }
 
         currentStep = "Fuzzy Analysis";
         const groups = Array.from(fingerprintGroups.values());
-        await uiLog(`Analyzing ${groups.length} groups with 82% Precision...`);
+        await uiLog(`Analyzing ${groups.length} groups...`);
 
         for (let i = 0; i < groups.length; i++) {
             const group = groups[i];
             if (group.length > 1) {
                 group.sort((a, b) => b.score - a.score);
                 const master = group[0];
+                
                 for (let j = 1; j < group.length; j++) {
                     const challenger = group[j];
                     const similarity = getSimilarity(master.desc, challenger.desc);
                     
                     if (similarity >= 0.95) {
-                        await uiLog(`Relationship found: ${challenger.char.name} is a Duplicate of ${master.char.name} (${Math.round(similarity * 100)}%)`, "error");
-                        toTagDuplicate.push(challenger.char);
+                        toTagDuplicate.push(challenger); 
                     } 
                     else if (similarity >= 0.82) {
-                        await uiLog(`Relationship found: ${challenger.char.name} is a Variant of ${master.char.name} (${Math.round(similarity * 100)}%)`, "warning");
                         toTagVariant.add(master.char);
                         toTagVariant.add(challenger.char);
                     }
                     else if (similarity >= 0.50 && master.name.toLowerCase() === challenger.name.toLowerCase()) {
-                        await uiLog(`Relationship found: ${challenger.char.name} shares Identity with ${master.char.name} (${Math.round(similarity * 100)}%)`, "warning");
                         toTagVariant.add(master.char);
                         toTagVariant.add(challenger.char);
                     }
@@ -176,15 +289,19 @@ export async function doAudit() {
             await uiLog(`Auditing tags for ${totalOps} related characters...`, "warning");
             let processedCount = 0;
 
-            for (const char of toTagDuplicate) {
+            for (const item of toTagDuplicate) {
+                const char = item.char;
                 const alreadyDone = isAlreadyTagged(char, "Duplicate") || sessionTagged.has(char.avatar);
-                if (alreadyDone) {
-                    await uiLog(`Skipping Duplicate (Already Tagged): ${char.name}`, "success");
-                    continue;
-                }
+                if (alreadyDone) continue;
                 
-                await uiLog(`Writing Duplicate Tag: ${char.name}`);
+                await uiLog(`Marking Duplicate: ${char.name}`);
                 executeSlashCommands(`/tag-add name="${char.avatar}" Duplicate`);
+                
+                if (item.hasFormatIssues) {
+                     await uiLog(`>> Flagging Bad Format: ${char.name}`, "error");
+                     executeSlashCommands(`/tag-add name="${char.avatar}" IncorrectFormat`);
+                }
+
                 sessionTagged.add(char.avatar);
                 processedCount++;
 
@@ -196,12 +313,9 @@ export async function doAudit() {
 
             for (const char of toTagVariant) {
                 const alreadyDone = isAlreadyTagged(char, "Variant") || sessionTagged.has(char.avatar);
-                if (alreadyDone) {
-                    await uiLog(`Skipping Variant (Already Tagged): ${char.name}`, "success");
-                    continue;
-                }
+                if (alreadyDone) continue;
                 
-                await uiLog(`Writing Variant Tag: ${char.name}`, "warning");
+                await uiLog(`Marking Variant: ${char.name}`, "warning");
                 executeSlashCommands(`/tag-add name="${char.avatar}" Variant`);
                 sessionTagged.add(char.avatar);
                 processedCount++;
@@ -227,5 +341,6 @@ export async function doAudit() {
         }
     } catch (error) {
         await uiLog(`💥 CRITICAL FAILURE during ${currentStep}: ${error.message}`, "error");
+        console.error(error);
     }
 }

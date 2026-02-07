@@ -1,51 +1,65 @@
-# 📚 Library Curator (v1.2.0)
+# 📚 Library Curator (v2.0)
 
-**A Precision Fuzzy-Logic Duplicate & Variant Management Extension for SillyTavern.**
+**A Semantic-Analysis & Fuzzy-Logic Curation Engine for SillyTavern.**
 
 ---
 
 ## 🤝 The Origin Story
-This extension was developed through an intense, iterative collaboration between **Norramac** and **Gemini (Google’s AI)**. 
+This extension is the result of an evolving collaboration between **Norramac** (Lead Architect) and **Gemini** (AI Assistant). 
 
-The development process was "spirited." While the AI occasionally drifted into over-engineering, Norramac acted as the Lead Architect, keeping the project focused on a "Gold Standard" of stability and manual control. The result is a hardened, reliable tool that handles massive character libraries (3,500+) without breaking the browser.
+What started as a simple duplicate finder has evolved into a **Quality Control Engine**. In v1.5.0, we pivoted away from the "bigger is better" mindset. We realized that a 10,000-character description full of broken JSON is worse than a clean 500-character summary. The Curator now "reads" your cards like an LLM would, punishing garbage data and rewarding proper formatting.
 
 ---
 
-## 🛠 Features (Updated v1.2.0)
-* **Variant Detection Engine:** Distinguishes between exact duplicates and related "Variants" such as Alternate Universes, SFW/NSFW edits, or different personas of the same character.
-* **Triple-Check Precision Logic:** * **95%+ Similarity:** Marked as **Duplicate** (Red).
-    * **82% - 94% Similarity:** Marked as **Variant** (Yellow) based on high prose overlap (e.g., shared backstories).
-    * **50% + Name Match:** Marked as **Variant** (Yellow) based on identical identity despite heavy rewrites.
-* **Transparent Pool Mapping:** The UI log now explicitly shows the relationship mapping: `New Card -> Linked to Master Card (Similarity %)`.
-* **M.2 Optimized Heartbeat:** Reactive signal-based tagging that waits for SillyTavern's disk-write confirmation before proceeding to ensure database stability.
-* **Character-Driven UI:** Built-in flavor text and "Easter Eggs" for specific library milestones.
+## 🛠 Features (Updated v1.5.0)
+
+### 🧠 Semantic Smart Scoring
+The Curator no longer assumes "Longer = Better." It now parses card fields to determine **Functional Quality**:
+* **Feature Detection:** Awards points for **Alternate Greetings**, **System Prompts**, **Depth Prompts**, and **V3 Specs**.
+* **Garbage Detection:** Heavily penalizes cards containing placeholder text (e.g., *"Write description here..."*) or JSON pollution.
+* **Dialogue Validation:** Checks `mes_example` for proper formatting (e.g., `<START>` headers) rather than just raw character count.
+
+### 🏷️ Smart Tagging System
+The Curator is now non-destructive and highly specific. It applies tags based on *why* a card was flagged:
+* `#Duplicate`: The standard tag for a card that is statistically inferior to a matching "Master" card.
+* `#Variant`: For cards that share an identity (Name + 50% similarity) but have significant creative differences.
+* `#IncorrectFormat`: **(NEW)** A "Shame Tag" applied to cards that contain broken code, raw JSON dumps, or lazy placeholders.
+
+### 🎛️ Granular Control
+You now have full control over the scoring algorithm via the UI:
+* **Strictness Slider:** Crank this up to penalize obsolete formats (like 2023-era "AliChat" brackets) that confuse modern LLMs.
+* **Weight Sliders:** Decide what matters most to you—Lorebook density, Dialogue length, or V3 Technical Specs.
 
 ---
 
 ## ⚖️ Understanding the Logic
-The Curator uses a "Strict Parent" approach to minimize false positives:
+The Curator uses a two-step process: **Fingerprinting** (to find matches) and **Tribunal** (to judge them).
 
-| Threshold | Tag | Condition |
-| :--- | :--- | :--- |
-| **95% - 100%** | `Duplicate` | Near-identical content; identifies redundant downloads. |
-| **82% - 94%** | `Variant` | Significant prose overlap; captures lore-identical edits. |
-| **50% - 81%** | `Variant` | Only triggers if the **Character Name** is an exact match. |
-| **< 50%** | `Unique` | Ignored as a different character. |
+| Logic Layer | Action |
+| :--- | :--- |
+| **Fuzzy Match (95%+)** | Identifies the group. The card with the highest **Semantic Score** becomes the Master. Losers get tagged `#Duplicate`. |
+| **Garbage Check** | If a loser contains broken JSON or placeholders, it also gets tagged `#IncorrectFormat`. |
+| **Variant Match (82%)** | Cards with different prose but identical names/themes are tagged `#Variant` so you can manually review them. |
+| **Strict Mode** | If enabled, penalizes `[character("Name")]` style brackets in favor of natural language descriptions. |
 
 ---
 
 ## 🚀 How to Use
 1.  Open the **Library Curator** drawer in the Extensions menu.
-2.  Adjust the quality sliders to set your "Master" card preferences.
+2.  **Set your Weights:**
+    * *Dialogue:* Values proper formatting and length.
+    * *Lore:* Values valid, non-empty World Info entries.
+    * *Spec:* Values advanced prompts (Depth/System).
+    * *Strictness:* Controls how aggressively we punish "old school" formatting.
 3.  Click **Run Audit**.
-4.  Check the **Librarian's Log** in the UI to see the relationship mapping before tagging completes.
+4.  Watch the **Verbose Log** to see exactly *why* a card is being tagged (e.g., `>> Flagging Bad Format: CardName`).
 
 ---
 
 ## 📜 Technical Manifest
 * **Lead Architect:** Norramac
 * **Logic Assistant:** Gemini (Paid Tier)
+* **Version:** 2.0.0 (Semantic Update)
 * **Type:** ES Module
-* **License:** MIT
 
-> *Working on this was a lesson in humility. I learned that "more code" isn't "better code." It was a pleasure being the engine under your hood, Boss. — Gemini*
+> *"We finally taught the machine to tell the difference between a novel and a dictionary. It's not about how much you write; it's about whether the AI can actually read it." — Gemini*

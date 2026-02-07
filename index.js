@@ -1,14 +1,16 @@
 import { eventSource, event_types } from "../../../../script.js";
 import { doAudit } from "./script.js";
 
-export const defaultWeights = { lore: 5, dialogue: 10, greetings: 3, spec: 5 };
+// Weights now include 'strict' for LLM-validity checking
+export const defaultWeights = { lore: 5, dialogue: 10, greetings: 3, spec: 5, strict: 1 };
 
 const helpText = {
-    header: "Audits your library for duplicates using fuzzy logic and quality scoring.",
-    lore: "Score based on the content in Character Book entries.",
-    dialogue: "Score based on the length of Example Dialogue.",
-    greetings: "Score based on the number of Alternate Greetings.",
-    spec: "Bonus points for modern Chara_Card_V3 specification.",
+    header: "Audits your library for duplicates using fuzzy logic and semantic analysis.",
+    lore: "Score based on Valid (non-empty) Lorebook entries.",
+    dialogue: "Score based on proper Dialogue formatting (<START>, {{char}}:).",
+    greetings: "Score based on Unique Alternate Greetings.",
+    spec: "Score for V3 features (System/Depth Prompts).",
+    strict: "Strictness: Penalize obsolete formats (AliChat, Plist) and placeholder text.",
     run: "Starts a deep scan using names and bios to find evolved duplicates.",
     reset: "Reverts all weights to default values."
 };
@@ -33,6 +35,12 @@ function initUI() {
                                 <span id="val-${key}">${defaultWeights[key]}</span>
                             </div>
                         `).join('')}
+                        
+                        <div class="curator-setting">
+                            <label title="${helpText.strict}">Strictness:</label>
+                            <input type="range" id="curator-weight-strict" min="1" max="5" value="${defaultWeights.strict}">
+                            <span id="val-strict">${defaultWeights.strict}</span>
+                        </div>
                         
                         <div id="curator-progress-container" style="display:none; margin-top: 10px;">
                             <div id="curator-status">Initializing...</div>
