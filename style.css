@@ -14,8 +14,14 @@
     flex: 2;
     cursor: pointer;
 }
+.curator-setting input[type="checkbox"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+}
 .curator-setting span {
-    width: 30px;
+    width: 35px;
     text-align: right;
     font-weight: bold;
     color: var(--SmartThemeQuoteColor);
@@ -29,11 +35,18 @@
     display: none; 
 }
 #curator-status {
-    font-size: 0.9em;
+    font-size: 14px;
     margin-bottom: 8px;
     color: var(--mainColor);
     font-weight: bold;
     text-shadow: 1px 1px 1px black;
+    min-height: 20px;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* Allow dynamic font sizing */
+    transition: font-size 0.1s ease;
 }
 .curator-progress-bg {
     width: 100%;
@@ -48,14 +61,13 @@
 #curator-progress-bar {
     background-color: var(--mainColor, #00bbff) !important;
     height: 100% !important;
-    /* Width removed to stay in line with Gold Script control */
     transition: width 0.2s ease-out;
 }
 #curator-log {
     margin-top: 10px;
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 11px;
-    height: 100px;
+    height: 150px;
     overflow-y: auto;
     background: #000 !important;
     padding: 10px;
@@ -91,4 +103,109 @@
 }
 #st-curator-run {
     flex: 2 !important; /* Prioritizes the main action width */
+}
+
+/* Section Headers */
+.st-library-curator-settings h4 {
+    margin: 15px 0 10px 0;
+    font-size: 0.9em;
+    color: var(--mainColor);
+    font-weight: bold;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 5px;
+}
+
+/* Forensics Toggle Special Styling */
+.curator-setting input[type="checkbox"]:checked {
+    accent-color: var(--mainColor, #00bbff);
+}
+
+/* Tooltip Enhancement */
+.curator-setting label[title]:hover {
+    border-bottom-color: var(--mainColor);
+    transition: border-bottom-color 0.2s ease;
+}
+
+/* Value Display Enhancement */
+.curator-setting span {
+    min-width: 40px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .curator-setting {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .curator-setting label {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    
+    .curator-setting input[type="range"] {
+        width: 100%;
+    }
+    
+    .curator-actions {
+        flex-direction: column !important;
+    }
+    
+    .curator-actions button {
+        width: 100% !important;
+    }
+}
+
+/* Loading Animation for Progress Bar */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+#curator-progress-bar {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* Smooth Transitions */
+.curator-setting input[type="range"]:hover {
+    filter: brightness(1.2);
+    transition: filter 0.2s ease;
+}
+
+/* Log Entry Fade-in */
+#curator-log div {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Enhanced Button Hover States */
+.curator-actions button:hover:not(:disabled) {
+    filter: brightness(1.15);
+    transition: filter 0.2s ease;
+    transform: translateY(-1px);
+}
+
+.curator-actions button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* Disabled State */
+.curator-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Version Badge */
+.st-library-curator-settings .inline-drawer-header b::after {
+    content: "4.0";
+    font-size: 0.7em;
+    margin-left: 5px;
+    opacity: 0.6;
+    font-weight: normal;
 }

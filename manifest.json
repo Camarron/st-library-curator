@@ -1,9 +1,9 @@
 {
     "name": "Library Curator",
     "display_name": "Library Curator",
-    "description": "Fuzzy logic duplicate finder with Semantic Analysis",
-    "version": "2.0",
-    "author": "Norramac and Gemini",
+    "description": "High-speed forensic auditing, granular error tagging, and fuzzy logic duplicate detection. Refactored by Claude with improved error handling and ST API compliance.",
+    "version": "4.0",
+    "author": "Norramac, Gemini, and Claude",
     "entrypoint": "index.js",
     "js": [
         "index.js"

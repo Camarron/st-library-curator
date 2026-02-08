@@ -1,17 +1,28 @@
 import { eventSource, event_types } from "../../../../script.js";
 import { doAudit } from "./script.js";
 
-// Weights now include 'strict' for LLM-validity checking
-export const defaultWeights = { lore: 5, dialogue: 10, greetings: 3, spec: 5, strict: 1 };
+// Default weights - now fully customizable
+export const defaultWeights = { 
+    lore: 5, 
+    dialogue: 10, 
+    greetings: 3, 
+    spec: 5, 
+    strict: 1,
+    descLength: 200,  // Characters per score point
+    qualityThreshold: 20  // Minimum score before flagging
+};
 
 const helpText = {
     header: "Audits your library for duplicates using fuzzy logic and semantic analysis.",
-    lore: "Score based on Valid (non-empty) Lorebook entries.",
-    dialogue: "Score based on proper Dialogue formatting (<START>, {{char}}:).",
-    greetings: "Score based on Unique Alternate Greetings.",
-    spec: "Score for V3 features (System/Depth Prompts).",
-    strict: "Strictness: Penalize obsolete formats (AliChat, Plist) and placeholder text.",
-    run: "Starts a deep scan using names and bios to find evolved duplicates.",
+    lore: "Lorebook Weight: Points awarded per valid lorebook entry (content >10 chars + keywords).",
+    dialogue: "Dialogue Weight: Points for properly formatted example messages (<START>, colons, etc.).",
+    greetings: "Greetings Weight: Points per unique alternate greeting.",
+    spec: "V3 Spec Weight: Points for advanced prompts (system_prompt, depth_prompt).",
+    strict: "Strictness: Multiplier for penalties on obsolete formats (AliChat, Plist) and placeholders.",
+    descLength: "Description Length Divisor: Character count divided by this = score points. Lower = more points.",
+    qualityThreshold: "Quality Threshold: Cards below this score get flagged with [NEEDS_FIXING].",
+    forensics: "Enable Forensics: Scan for formatting issues (JSON artifacts, dialogue leaks, placeholders).",
+    run: "Starts a deep scan using names and bios to find duplicates, variants, and format issues.",
     reset: "Reverts all weights to default values."
 };
 
@@ -27,23 +38,62 @@ function initUI() {
                 </div>
                 <div class="inline-drawer-content" style="display: none;">
                     <div class="setup_section">
-                        <p>Adjust weights to prioritize card quality.</p>
+                        <p style="margin-bottom: 12px; font-size: 0.85em; color: var(--SmartThemeQuoteColor);">
+                            Adjust weights to customize quality scoring. Hover over labels for details.
+                        </p>
+                        
+                        <!-- Forensics Toggle -->
+                        <div class="curator-setting" style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <label title="${helpText.forensics}" style="flex: 2;">
+                                <input type="checkbox" id="curator-toggle-forensics" checked style="margin-right: 8px;">
+                                Enable Forensic Scanning
+                            </label>
+                        </div>
+                        
+                        <!-- Weight Sliders -->
+                        <h4 style="margin: 15px 0 10px 0; font-size: 0.9em; color: var(--mainColor);">Quality Weights</h4>
+                        
                         ${['lore', 'dialogue', 'greetings', 'spec'].map(key => `
                             <div class="curator-setting">
                                 <label title="${helpText[key]}">${key.charAt(0).toUpperCase() + key.slice(1)}:</label>
-                                <input type="range" id="curator-weight-${key}" min="0" max="${key === 'dialogue' ? 50 : 20}" value="${defaultWeights[key]}">
+                                <input type="range" id="curator-weight-${key}" min="0" max="${key === 'dialogue' ? 50 : 20}" value="${defaultWeights[key]}" step="1">
                                 <span id="val-${key}">${defaultWeights[key]}</span>
                             </div>
                         `).join('')}
                         
                         <div class="curator-setting">
                             <label title="${helpText.strict}">Strictness:</label>
-                            <input type="range" id="curator-weight-strict" min="1" max="5" value="${defaultWeights.strict}">
+                            <input type="range" id="curator-weight-strict" min="0" max="5" value="${defaultWeights.strict}" step="0.5">
                             <span id="val-strict">${defaultWeights.strict}</span>
                         </div>
                         
-                        <div id="curator-progress-container" style="display:none; margin-top: 10px;">
-                            <div id="curator-status">Initializing...</div>
+                        <h4 style="margin: 15px 0 10px 0; font-size: 0.9em; color: var(--mainColor);">Advanced Settings</h4>
+                        
+                        <div class="curator-setting">
+                            <label title="${helpText.descLength}">Desc Length Divisor:</label>
+                            <input type="range" id="curator-weight-descLength" min="50" max="500" value="${defaultWeights.descLength}" step="50">
+                            <span id="val-descLength">${defaultWeights.descLength}}</span>
+                        </div>
+                        
+                        <div class="curator-setting">
+                            <label title="${helpText.qualityThreshold}">Quality Threshold:</label>
+                            <input type="range" id="curator-weight-qualityThreshold" min="0" max="50" value="${defaultWeights.qualityThreshold}" step="5">
+                            <span id="val-qualityThreshold">${defaultWeights.qualityThreshold}</span>
+                        </div>
+                        
+                        <!-- Progress Container -->
+                        <div id="curator-progress-container" style="display:none; margin-top: 15px;">
+                            <div id="curator-status" style="
+                                font-size: 14px;
+                                margin-bottom: 8px;
+                                color: var(--mainColor);
+                                font-weight: bold;
+                                text-shadow: 1px 1px 1px black;
+                                min-height: 20px;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
+                                white-space: nowrap;
+                            ">Initializing...</div>
                             <div class="curator-progress-bg" style="background: rgba(0,0,0,0.2); border-radius: 4px; height: 8px; margin: 5px 0; overflow: hidden;">
                                 <div id="curator-progress-bar" style="width: 0%; height: 100%; background: #4a9eff; border-radius: 4px; transition: width 0.2s;"></div>
                             </div>
@@ -62,11 +112,14 @@ function initUI() {
                             "></div>
                         </div>
 
-                        <div class="curator-actions" style="margin-top: 10px; display: flex; gap: 5px;">
+                        <!-- Action Buttons -->
+                        <div class="curator-actions" style="margin-top: 15px; display: flex; gap: 8px;">
                             <button id="st-curator-run" class="menu_button interactable" title="${helpText.run}">
                                 <i class="fa-solid fa-broom-magic"></i> Run Audit
                             </button>
-                            <button id="st-curator-reset" class="menu_button interactable danger_button" title="${helpText.reset}">Reset</button>
+                            <button id="st-curator-reset" class="menu_button interactable danger_button" title="${helpText.reset}">
+                                <i class="fa-solid fa-rotate-left"></i> Reset
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -75,16 +128,25 @@ function initUI() {
 
     $('#extensions_settings').append(html);
 
+    // Update value displays when sliders change
     $(document).on('input', '#st-curator-wrapper input[type="range"]', function() {
-        $(`#val-${this.id.split('-').pop()}`).text(this.value);
+        const key = this.id.replace('curator-weight-', '');
+        $(`#val-${key}`).text(this.value);
     });
 
+    // Reset button
     $(document).on('click', '#st-curator-reset', () => {
         Object.keys(defaultWeights).forEach(key => {
-            $(`#curator-weight-${key}`).val(defaultWeights[key]).trigger('input');
+            const slider = $(`#curator-weight-${key}`);
+            if (slider.length) {
+                slider.val(defaultWeights[key]).trigger('input');
+            }
         });
+        $('#curator-toggle-forensics').prop('checked', true);
+        toastr.info('Settings reset to defaults');
     });
 
+    // Run audit button
     $(document).on('click', '#st-curator-run', doAudit);
 }
 
