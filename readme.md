@@ -9,6 +9,8 @@
 ## 🔍 Overview
 
 The Library Curator has evolved beyond simple duplicate detection—it hunts for **Technical Debt**. Version 4.0 introduces full user customization, smart tag counting, and delightful flavor text while maintaining the high-speed Forensic Engine that processes libraries of 6,000+ cards without freezing the UI.
+PowerShell Script (To NonDestructively Move Duplicates to a Subfolder, logging everything to a .csv - Usage Drop .ps1 File into your Characters Folder and run it.)
+( https://mega.nz/file/osRVHbZR#VFjhvGBIM8O9XTZHdKpqWPrhci-MbPBwnkeMZw8biSA )
 
 ---
 
@@ -252,6 +254,7 @@ The status bar cycles through **150+ witty messages** during the tagging phase, 
 - Disable forensic scanning (toggle off)
 - Reduce quality weights (lowers processing complexity)
 - Consider using PowerShell pre-processor for duplicates first
+( https://mega.nz/file/osRVHbZR#VFjhvGBIM8O9XTZHdKpqWPrhci-MbPBwnkeMZw8biSA )
 
 **Too many false positives?**
 - Increase similarity thresholds in code (lines 500-520)
